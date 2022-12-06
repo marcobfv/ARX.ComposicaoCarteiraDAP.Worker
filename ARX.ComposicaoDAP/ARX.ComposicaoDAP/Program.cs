@@ -11,6 +11,7 @@ namespace ARX.ComposicaoDAP
         private static readonly DateTime dataInicioFundo = new DateTime(2018, 1, 2);
         private static readonly DateTime dataFimFundo = new DateTime(2020, 1, 17);
         private static readonly decimal valorFundo = 10000000m;
+        private static readonly int qtdLotePadrao = 5;
 
         static void Main(string[] args)
         {
@@ -77,7 +78,7 @@ namespace ARX.ComposicaoDAP
         private static ICollection<RentabilidadeFundoDAP> ConstruirRentabilidades(
             IEnumerable<string> codigos, ICollection<ContratoDAP> contratos)
         {
-            Console.WriteLine($"Identificando rentabilidades...");
+            Console.WriteLine($"Identificando rentabilidades...\r\n");
 
             ICollection<RentabilidadeFundoDAP> rentabilidades =
                 new List<RentabilidadeFundoDAP>();
@@ -96,18 +97,18 @@ namespace ARX.ComposicaoDAP
         private static Dictionary<ContratoDAP, int> ComporCarteira(ICollection<RentabilidadeFundoDAP> rentabilidades)
         {
             decimal valorLastro = valorFundo;
-            int qtdLote = 5;
             var carteira = new Dictionary<ContratoDAP, int>();
 
             foreach (var item in rentabilidades.OrderByDescending(x => x.Rentabilidade)
-                .Where(x => x.ContratoInicio.DataReferencia.Equals(dataInicioFundo)))
+                .Where(x => x.ContratoInicio.DataReferencia.Equals(dataInicioFundo)
+                    && x.ContratoFim.DataReferencia.Equals(dataFimFundo)))
             {
-                decimal valorLote = item.ContratoInicio.PU * qtdLote;
+                decimal valorLote = item.ContratoInicio.PU * qtdLotePadrao;
                 int qtdContratos = 0;
 
                 while (valorLote <= valorLastro)
                 {
-                    qtdContratos += qtdLote;
+                    qtdContratos += qtdLotePadrao;
                     valorLastro -= valorLote;
                 }
 
@@ -120,7 +121,6 @@ namespace ARX.ComposicaoDAP
 
             Console.WriteLine($"\r\nValor Fundo: {valorFundo}");
             Console.WriteLine($"Valor restando: {valorLastro}");
-            Console.WriteLine($"Exposição Total: {carteira.Sum(x => (x.Key.PU * x.Value) / valorFundo)}");
 
             return carteira;
         }
@@ -131,8 +131,12 @@ namespace ARX.ComposicaoDAP
 
             foreach (var item in carteira.Where(x => x.Value > 0))
             {
-                Console.WriteLine($"DAP: {item.Key.Codigo} | Qtd. Contratos: {item.Value}");
+                Console.WriteLine($"DAP: {item.Key.Codigo} | PU Entrada: {item.Key.PU} | Data Ref: {item.Key.DataReferencia} " +
+                    $"| Qtd. Contratos: {item.Value} | Valor Alocado: {item.Key.PU * item.Value}");
             }
+
+            Console.WriteLine($"\r\nExposição Total: {carteira.Sum(x => (x.Key.PU * x.Value) / valorFundo)}");
+
         }
     }
 }
