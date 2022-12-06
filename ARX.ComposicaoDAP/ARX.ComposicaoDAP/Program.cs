@@ -1,4 +1,5 @@
-﻿using ClosedXML.Excel;
+﻿using ARX.ComposicaoDAP.Domain;
+using ClosedXML.Excel;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -9,46 +10,55 @@ namespace ARX.ComposicaoDAP
     {
         static void Main(string[] args)
         {
-            var contratos = CarregarExcel();
+            var contratos = CarregarContratosFromExcel();
 
             EncontrarComposicaoCarteira(contratos);
         }
 
-        private static ICollection<ContratoDAP> CarregarExcel()
+        private static ICollection<ContratoDAP> CarregarContratosFromExcel()
         {
             Console.WriteLine("Carregando arquivo....");
 
-            var file = new XLWorkbook(@"C:\Users\Marco\source\repos\ARX.ComposicaoDAP\ARX.ComposicaoDAP\historico_dap.xlsx");
+            using var file = new XLWorkbook(@"C:\Users\Marco\source\repos\ARX.ComposicaoDAP\ARX.ComposicaoDAP\historico_dap.xlsx");
             var sheet = file.Worksheets.First();
             var totalLinhas = sheet.Rows().Count();
             var contratos = new List<ContratoDAP>(totalLinhas);
+            var dataInicioFundo = new DateTime(2018, 1, 2);
+            var dataFimFundo = new DateTime(2020, 1, 17);
 
             Console.WriteLine($"Arquivo carregado, {totalLinhas} linhas");
             Console.WriteLine($"Carregando dados");
 
             for (int linha = 2; linha <= totalLinhas; linha++)
             {
-                contratos.Add(new ContratoDAP
-                {
-                    Codigo = sheet.Cell($"C{linha}").Value.ToString(),
-                    PU = decimal.Parse(sheet.Cell($"E{linha}").Value.ToString()),
-                    DataReferencia = DateTime.Parse(sheet.Cell($"A{linha}").Value.ToString())
-                });
+                var dataReferencia = DateTime.Parse(sheet.Cell($"A{linha}").Value.ToString());
 
+                if (dataReferencia >= dataInicioFundo
+                    && dataReferencia <= dataFimFundo)
+                    contratos.Add(new ContratoDAP
+                    {
+                        Codigo = sheet.Cell($"C{linha}").Value.ToString(),
+                        PU = decimal.Parse(sheet.Cell($"E{linha}").Value.ToString()),
+                        DataVencimento = DateTime.Parse(sheet.Cell($"D{linha}").Value.ToString()),
+                        DataReferencia = dataReferencia
+                    });
             }
 
             Console.WriteLine($"Dados carregado");
 
-            return contratos;
+            return contratos.OrderBy(x => x.DataReferencia)
+                .ToList();
         }
 
         private static void EncontrarComposicaoCarteira(ICollection<ContratoDAP> contratos)
         {
             var codigos = IdentificarCodigos(contratos);
 
-            var rentabilidades = IdentificarRentabilidades(codigos, contratos);
+            var rentabilidades = ConstruirRentabilidades(codigos, contratos);
 
             var carteira = ComporCarteira(rentabilidades);
+
+            ImprimirCarteira(carteira);
         }
 
         private static IEnumerable<string> IdentificarCodigos(ICollection<ContratoDAP> contratos)
@@ -67,46 +77,36 @@ namespace ARX.ComposicaoDAP
             return codigos;
         }
 
-        private static Dictionary<ContratoDAP, decimal> IdentificarRentabilidades(
+        private static ICollection<RentabilidadeFundoDAP> ConstruirRentabilidades(
             IEnumerable<string> codigos, ICollection<ContratoDAP> contratos)
         {
             Console.WriteLine($"Identificando rentabilidades...");
 
-            Dictionary<ContratoDAP, decimal> rentabilidades =
-                new Dictionary<ContratoDAP, decimal>();
+            ICollection<RentabilidadeFundoDAP> rentabilidades =
+                new List<RentabilidadeFundoDAP>();
 
             foreach (var codigo in codigos)
             {
-                var referenciaInicio = contratos.Where(x => x.Codigo.Equals(codigo)
-                                            && x.DataReferencia.Equals(new DateTime(2018, 1, 2)))
-                    .FirstOrDefault();
+                var referenciaInicio = contratos.Where(x => x.Codigo.Equals(codigo)).First();
+                var referenciaFim = contratos.Where(x => x.Codigo.Equals(codigo)).Last();
 
-                var referenciaFim = contratos.Where(x => x.Codigo.Equals(codigo)
-                                            && x.DataReferencia.Equals(new DateTime(2020, 1, 17)))
-                    .FirstOrDefault();
-
-
-                if (referenciaInicio != null && referenciaFim != null)
-                {
-                    var rentabilidade = ((referenciaFim.PU - referenciaInicio.PU) * 100) / referenciaInicio.PU;
-
-                    rentabilidades.Add(referenciaFim, rentabilidade);
-                }
-
+                rentabilidades.Add(new RentabilidadeFundoDAP(referenciaInicio, referenciaFim));
             }
 
             return rentabilidades;
         }
 
-        private static Dictionary<ContratoDAP, int> ComporCarteira(Dictionary<ContratoDAP, decimal> rentabilidades)
+        private static Dictionary<ContratoDAP, int> ComporCarteira(ICollection<RentabilidadeFundoDAP> rentabilidades)
         {
-            decimal valorLastro = 10100000m;
-            int qtdLote = 5;
+            decimal valorFundo = 10000000m;
+            decimal valorLastro = valorFundo;
+            int qtdLote = 20;
             var carteira = new Dictionary<ContratoDAP, int>();
 
-            foreach (var item in rentabilidades.OrderByDescending(x => x.Value))
+            foreach (var item in rentabilidades.OrderByDescending(x => x.Rentabilidade)
+                .Where(x => x.ContratoInicio.DataReferencia.Equals(new DateTime(2018, 1, 2))))
             {
-                decimal valorLote = item.Key.PU * qtdLote;
+                decimal valorLote = item.ContratoInicio.PU * qtdLote;
                 int qtdContratos = 0;
 
                 while (valorLote <= valorLastro)
@@ -115,15 +115,28 @@ namespace ARX.ComposicaoDAP
                     valorLastro -= valorLote;
                 }
 
-                carteira.Add(item.Key, qtdContratos);
+                carteira.Add(item.ContratoInicio, qtdContratos);
 
-                Console.WriteLine($"DAP: {item.Key.Codigo} | Rentabilidade: {item.Value} " +
-                    $"| PU: {item.Key.PU} | Valor lote: {valorLote} | Contratos: {qtdContratos}");
+                Console.WriteLine($"DAP: {item.ContratoInicio.Codigo} | PU Inic: {item.ContratoInicio.PU} | PU Fim: {item.ContratoFim.PU} " +
+                    $"| Rentabilidade: {item.Rentabilidade} | Dt. Venc: {item.ContratoInicio.DataVencimento} " +
+                    $"| Valor lote: {valorLote}");
             }
 
+            Console.WriteLine($"Valor Fundo: {valorFundo}");
             Console.WriteLine($"Valor restando: {valorLastro}");
-            
+            Console.WriteLine($"Exposição Total: {carteira.Sum(x => (x.Key.PU * x.Value) / valorFundo)}");
+
             return carteira;
+        }
+
+        private static void ImprimirCarteira(Dictionary<ContratoDAP, int> carteira)
+        {
+            Console.WriteLine("\r\nDistribuição Carteira!!!\r\n");
+
+            foreach (var item in carteira.Where(x => x.Value > 0))
+            {
+                Console.WriteLine($"DAP: {item.Key.Codigo} | Qtd. Contratos: {item.Value}");
+            }
         }
     }
 }
