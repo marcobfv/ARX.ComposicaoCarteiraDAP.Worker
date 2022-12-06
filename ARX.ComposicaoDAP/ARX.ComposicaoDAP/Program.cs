@@ -8,6 +8,10 @@ namespace ARX.ComposicaoDAP
 {
     class Program
     {
+        private static readonly DateTime dataInicioFundo = new DateTime(2018, 1, 2);
+        private static readonly DateTime dataFimFundo = new DateTime(2020, 1, 17);
+        private static readonly decimal valorFundo = 10000000m;
+
         static void Main(string[] args)
         {
             var contratos = CarregarContratosFromExcel();
@@ -19,15 +23,13 @@ namespace ARX.ComposicaoDAP
         {
             Console.WriteLine("Carregando arquivo....");
 
-            using var file = new XLWorkbook(@"C:\Users\Marco\source\repos\ARX.ComposicaoDAP\ARX.ComposicaoDAP\historico_dap.xlsx");
+            using var file = new XLWorkbook(Environment.CurrentDirectory + @"\historico_dap.xlsx");
             var sheet = file.Worksheets.First();
             var totalLinhas = sheet.Rows().Count();
             var contratos = new List<ContratoDAP>(totalLinhas);
-            var dataInicioFundo = new DateTime(2018, 1, 2);
-            var dataFimFundo = new DateTime(2020, 1, 17);
 
             Console.WriteLine($"Arquivo carregado, {totalLinhas} linhas");
-            Console.WriteLine($"Carregando contratos");
+            Console.WriteLine($"Carregando contratos...");
 
             for (int linha = 2; linha <= totalLinhas; linha++)
             {
@@ -93,13 +95,12 @@ namespace ARX.ComposicaoDAP
 
         private static Dictionary<ContratoDAP, int> ComporCarteira(ICollection<RentabilidadeFundoDAP> rentabilidades)
         {
-            decimal valorFundo = 10000000m;
             decimal valorLastro = valorFundo;
             int qtdLote = 5;
             var carteira = new Dictionary<ContratoDAP, int>();
 
             foreach (var item in rentabilidades.OrderByDescending(x => x.Rentabilidade)
-                .Where(x => x.ContratoInicio.DataReferencia.Equals(new DateTime(2018, 1, 2))))
+                .Where(x => x.ContratoInicio.DataReferencia.Equals(dataInicioFundo)))
             {
                 decimal valorLote = item.ContratoInicio.PU * qtdLote;
                 int qtdContratos = 0;
