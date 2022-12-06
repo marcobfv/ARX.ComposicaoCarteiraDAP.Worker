@@ -27,7 +27,7 @@ namespace ARX.ComposicaoDAP
             var dataFimFundo = new DateTime(2020, 1, 17);
 
             Console.WriteLine($"Arquivo carregado, {totalLinhas} linhas");
-            Console.WriteLine($"Carregando dados");
+            Console.WriteLine($"Carregando contratos");
 
             for (int linha = 2; linha <= totalLinhas; linha++)
             {
@@ -44,7 +44,7 @@ namespace ARX.ComposicaoDAP
                     });
             }
 
-            Console.WriteLine($"Dados carregado");
+            Console.WriteLine($"Contratos carregados");
 
             return contratos.OrderBy(x => x.DataReferencia)
                 .ToList();
@@ -68,11 +68,6 @@ namespace ARX.ComposicaoDAP
             var codigos = contratos.GroupBy(x => x.Codigo)
                             .Select(grp => grp.Key)
                             .ToList();
-
-            foreach (var item in codigos)
-            {
-                Console.WriteLine($"Codigo: {item}");
-            }
 
             return codigos;
         }
@@ -100,7 +95,7 @@ namespace ARX.ComposicaoDAP
         {
             decimal valorFundo = 10000000m;
             decimal valorLastro = valorFundo;
-            int qtdLote = 20;
+            int qtdLote = 5;
             var carteira = new Dictionary<ContratoDAP, int>();
 
             foreach (var item in rentabilidades.OrderByDescending(x => x.Rentabilidade)
@@ -122,7 +117,7 @@ namespace ARX.ComposicaoDAP
                     $"| Valor lote: {valorLote}");
             }
 
-            Console.WriteLine($"Valor Fundo: {valorFundo}");
+            Console.WriteLine($"\r\nValor Fundo: {valorFundo}");
             Console.WriteLine($"Valor restando: {valorLastro}");
             Console.WriteLine($"Exposição Total: {carteira.Sum(x => (x.Key.PU * x.Value) / valorFundo)}");
 
